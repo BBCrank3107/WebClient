@@ -1,101 +1,176 @@
 package view;
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.OutputStream;
-import java.net.HttpURLConnection;
-import java.net.URL;
-import java.net.URLEncoder;
-import ip.IP;
 import javafx.application.Application;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
 import javafx.scene.layout.VBox;
+import javafx.stage.FileChooser;
 import javafx.stage.Stage;
+import java.io.*;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Scanner;
 
-public class RegisterPage extends Application {
+import ip.IP;
+
+public class ManagerPage extends Application {
+
+	private String username;
+	private ListView<String> listView;
+
+	public ManagerPage(String username) {
+		this.username = username;
+	}
 
 	@Override
 	public void start(Stage primaryStage) {
-		primaryStage.setTitle("Register");
+		primaryStage.setTitle("Manager");
 
-		TextField usernameField = new TextField();
-		usernameField.setPromptText("Username");
+		listView = new ListView<>();
+		Label lblUsername = new Label("Logged in as: " + username);
+		Button btnAdd = new Button("Add Website");
+		Button btnDelete = new Button("Delete Website");
+		Button btnLogout = new Button("Logout");
 
-		PasswordField passwordField = new PasswordField();
-		passwordField.setPromptText("Password");
+		// Load file list when the window opens
+		loadFileListFromServer();
 
-		PasswordField confirmPasswordField = new PasswordField();
-		confirmPasswordField.setPromptText("Confirm Password");
+		btnAdd.setOnAction(e -> {
+			FileChooser fileChooser = new FileChooser();
+			fileChooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("HTML Files", "*.html"));
+			File selectedFile = fileChooser.showOpenDialog(primaryStage);
 
-		Button btnRegister = new Button("Register");
-		Button btnBack = new Button("Back");
-
-		btnRegister.setOnAction(e -> {
-			String username = usernameField.getText();
-			String password = passwordField.getText();
-			String confirmPassword = confirmPasswordField.getText();
-
-			if (username.isEmpty() || password.isEmpty() || confirmPassword.isEmpty()) {
-				showAlert("Please fill in all fields!");
-				return;
-			}
-
-			if (!password.equals(confirmPassword)) {
-				showAlert("Passwords do not match!");
-				return;
-			}
-
-			// Tạo URL và kết nối đến server
-			String url = IP.SERVER_IP + "/register";
-			try {
-				HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
-				connection.setRequestMethod("POST");
-				connection.setDoOutput(true);
-				connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
-
-				// Tạo dữ liệu để gửi
-				String requestData = "username=" + URLEncoder.encode(username, "UTF-8") + "&password="
-						+ URLEncoder.encode(password, "UTF-8");
-
-				// Gửi dữ liệu
-				try (OutputStream os = connection.getOutputStream()) {
-					os.write(requestData.getBytes());
-					os.flush();
+			if (selectedFile != null) {
+				try {
+					uploadFileToServer(selectedFile);
+					loadFileListFromServer();
+				} catch (IOException ex) {
+					showAlert("File upload failed: " + ex.getMessage());
 				}
-
-				// Nhận phản hồi từ server
-				int responseCode = connection.getResponseCode();
-				if (responseCode == HttpURLConnection.HTTP_OK) {
-					BufferedReader in = new BufferedReader(new InputStreamReader(connection.getInputStream()));
-					String response = in.readLine();
-
-					if ("success".equals(response)) {
-						showAlert("Registration successful!");
-						new LoginPage().start(primaryStage);
-					} else {
-						showAlert("Registration failed");
-					}
-				} else {
-					showAlert("Registration failed");
-				}
-
-				connection.disconnect();
-			} catch (IOException ex) {
-				ex.printStackTrace();
-				showAlert("Error connecting to server.");
 			}
 		});
 
-		btnBack.setOnAction(e -> {
+		btnDelete.setOnAction(e -> {
+			String selectedFile = listView.getSelectionModel().getSelectedItem();
+			if (selectedFile != null) {
+				try {
+					deleteFileFromServer(selectedFile);
+					loadFileListFromServer();
+				} catch (IOException ex) {
+					showAlert("File deletion failed: " + ex.getMessage());
+				}
+			} else {
+				showAlert("Please select a file to delete.");
+			}
+		});
+
+		btnLogout.setOnAction(e -> {
+			sendLogoutRequest();
 			new LoginPage().start(primaryStage);
 		});
 
-		VBox layout = new VBox(10, usernameField, passwordField, confirmPasswordField, btnRegister, btnBack);
+		VBox layout = new VBox(10, lblUsername, listView, btnAdd, btnDelete, btnLogout);
 		Scene scene = new Scene(layout, 300, 250);
 		primaryStage.setScene(scene);
 		primaryStage.show();
+	}
+
+	// Upload file to server
+	private void uploadFileToServer(File file) throws IOException {
+		String fileName = URLEncoder.encode(file.getName(), StandardCharsets.UTF_8);
+		String url = IP.SERVER_IP + "/upload?username=" + username + "&filename=" + fileName;
+
+		HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
+		connection.setRequestMethod("POST");
+		connection.setDoOutput(true);
+		connection.setRequestProperty("Content-Type", "application/octet-stream");
+
+		try (OutputStream os = connection.getOutputStream(); FileInputStream fis = new FileInputStream(file)) {
+
+			byte[] buffer = new byte[4096];
+			int bytesRead;
+			while ((bytesRead = fis.read(buffer)) != -1) {
+				os.write(buffer, 0, bytesRead);
+			}
+		}
+
+		int responseCode = connection.getResponseCode();
+		if (responseCode == HttpURLConnection.HTTP_OK) {
+			showAlert("File uploaded successfully!");
+		} else {
+			showAlert("File upload failed with HTTP code: " + responseCode);
+		}
+
+		connection.disconnect();
+	}
+
+	// Load file list from server
+	private void loadFileListFromServer() {
+		try {
+			URL url = new URL(IP.SERVER_IP + "/files?username=" + username);
+			HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+			connection.setRequestMethod("GET");
+
+			int responseCode = connection.getResponseCode();
+			if (responseCode == HttpURLConnection.HTTP_OK) {
+				try (InputStream is = connection.getInputStream(); Scanner scanner = new Scanner(is)) {
+
+					List<String> files = new ArrayList<>();
+					while (scanner.hasNextLine()) {
+						String line = scanner.nextLine().trim();
+						if (!line.isEmpty()) {
+							files.add(line);
+						}
+					}
+					listView.getItems().setAll(files);
+				}
+			} else {
+				showAlert("Failed to load file list: HTTP " + responseCode);
+			}
+
+			connection.disconnect();
+		} catch (IOException e) {
+			showAlert("Failed to load file list: " + e.getMessage());
+		}
+	}
+
+	// Delete file from server
+	private void deleteFileFromServer(String fileName) throws IOException {
+		String encodedFileName = URLEncoder.encode(fileName, StandardCharsets.UTF_8);
+		String url = IP.SERVER_IP + "/delete?username=" + username + "&filename=" + encodedFileName;
+
+		HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
+		connection.setRequestMethod("DELETE");
+
+		int responseCode = connection.getResponseCode();
+		if (responseCode == HttpURLConnection.HTTP_OK) {
+			showAlert("File deleted successfully!");
+		} else {
+			showAlert("File deletion failed with HTTP code: " + responseCode);
+		}
+
+		connection.disconnect();
+	}
+
+	private void sendLogoutRequest() {
+		try {
+			String url = IP.SERVER_IP + "/logout?username=" + URLEncoder.encode(username, StandardCharsets.UTF_8);
+			HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
+			connection.setRequestMethod("POST");
+
+			int responseCode = connection.getResponseCode();
+			if (responseCode != HttpURLConnection.HTTP_OK) {
+				showAlert("Logout failed: HTTP " + responseCode);
+			}
+
+			connection.disconnect();
+		} catch (IOException ex) {
+			showAlert("Logout request failed: " + ex.getMessage());
+		}
 	}
 
 	private void showAlert(String message) {
