@@ -1,0 +1,62 @@
+.username-label {
+    -fx-font-size: 36px;
+    -fx-text-fill: #333;
+    -fx-font-weight: bold;
+    -fx-padding: 5px;
+    -fx-alignment: center;
+}
+
+.no-projects-label {
+	-fx-font-size: 20px;
+    -fx-text-fill: #333;
+    -fx-padding: 5px;
+}
+
+.avatar-image {
+    -fx-border-color: #ddd;
+    -fx-border-width: 2;
+}
+
+.create-button {
+    -fx-background-color: #4CAF50;
+    -fx-text-fill: white;
+    -fx-font-size: 14px;
+    -fx-padding: 10 20;
+    -fx-background-radius: 5;
+}
+
+.logout-button {
+    -fx-background-color: #2196F3;
+    -fx-text-fill: white;
+    -fx-font-size: 14px;
+    -fx-padding: 10 20;
+    -fx-background-radius: 5;
+}
+
+.left-container {
+    -fx-padding: 20;
+    -fx-spacing: 10;
+    -fx-background-color: #ffffff;
+    -fx-pref-width: 30%;
+    -fx-alignment: center; /* Centered alignment */
+}
+
+.project-card {
+    -fx-background-color: #ffffff;
+    -fx-padding: 15;
+    -fx-border-color: #ddd;
+    -fx-border-width: 1;
+    -fx-border-radius: 8;
+    -fx-background-radius: 8;
+    -fx-font-size: 18px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #007bff;
+    -fx-pref-width: 280;
+    -fx-pref-height: 80;
+}
+
+.project-card:hover {
+    -fx-background-color: #f7faff;
+    -fx-border-color: #007bff;
+    -fx-cursor: hand;
+}
