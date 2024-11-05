@@ -3,180 +3,233 @@ package view;
 import javafx.application.Application;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
+import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
+import javafx.scene.layout.BorderPane;
+import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
-import javafx.stage.FileChooser;
+import javafx.scene.shape.Circle;
 import javafx.stage.Stage;
 import java.io.*;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Scanner;
-
+import javafx.scene.input.MouseEvent;
 import ip.IP;
 
 public class ManagerPage extends Application {
 
-	private String username;
-	private ListView<String> listView;
+    private String email;
+    private String username;
+    private ImageView avatarImageView;
+    private Label lblUsernameText;
+    private VBox projectContainer;
+    private int projectCount;
+    private static final int PROJECTS_PER_HBOX = 3;
 
-	public ManagerPage(String username) {
-		this.username = username;
-	}
+    public ManagerPage(String email) {
+        this.email = email;
+        this.projectCount = 0;
+    }
 
-	@Override
-	public void start(Stage primaryStage) {
-		primaryStage.setTitle("Manager");
+    @Override
+    public void start(Stage primaryStage) {
+        primaryStage.setTitle("Manager");
 
-		listView = new ListView<>();
-		Label lblUsername = new Label("Logged in as: " + username);
-		Button btnAdd = new Button("Add Website");
-		Button btnDelete = new Button("Delete Website");
-		Button btnLogout = new Button("Logout");
+        avatarImageView = createAvatarImageView();
+        lblUsernameText = new Label("Loading username...");
+        lblUsernameText.getStyleClass().add("username-label");
 
-		// Load file list when the window opens
-		loadFileListFromServer();
+        Button btnCreate = new Button("Create Project");
+        Button btnLogout = new Button("Logout");
+        btnCreate.getStyleClass().add("create-button");
+        btnLogout.getStyleClass().add("logout-button");
 
-		btnAdd.setOnAction(e -> {
-			FileChooser fileChooser = new FileChooser();
-			fileChooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("HTML Files", "*.html"));
-			File selectedFile = fileChooser.showOpenDialog(primaryStage);
+        projectContainer = new VBox(10);
+        projectContainer.setPadding(new javafx.geometry.Insets(10));
+        projectContainer.setSpacing(10);
+        
+        VBox projectWrapper = new VBox();
+        VBox.setMargin(projectContainer, new javafx.geometry.Insets(30, 0, 0, 0));
+        projectWrapper.getChildren().add(projectContainer);
 
-			if (selectedFile != null) {
-				try {
-					uploadFileToServer(selectedFile);
-					loadFileListFromServer();
-				} catch (IOException ex) {
-					showAlert("File upload failed: " + ex.getMessage());
-				}
-			}
-		});
+        btnLogout.setOnAction(e -> {
+            sendLogoutRequest();
+            new LoginPage().start(primaryStage);
+        });
 
-		btnDelete.setOnAction(e -> {
-			String selectedFile = listView.getSelectionModel().getSelectedItem();
-			if (selectedFile != null) {
-				try {
-					deleteFileFromServer(selectedFile);
-					loadFileListFromServer();
-				} catch (IOException ex) {
-					showAlert("File deletion failed: " + ex.getMessage());
-				}
-			} else {
-				showAlert("Please select a file to delete.");
-			}
-		});
+        btnCreate.setOnAction(e -> showCreateProjectDialog());
 
-		btnLogout.setOnAction(e -> {
-			sendLogoutRequest();
-			new LoginPage().start(primaryStage);
-		});
+        VBox leftContainer = new VBox(10, avatarImageView, lblUsernameText);
+        leftContainer.getStyleClass().add("left-container");
 
-		VBox layout = new VBox(10, lblUsername, listView, btnAdd, btnDelete, btnLogout);
-		Scene scene = new Scene(layout, 300, 250);
-		primaryStage.setScene(scene);
-		primaryStage.show();
-	}
+        BorderPane layout = new BorderPane();
+        layout.setLeft(leftContainer);
+        layout.setCenter(projectWrapper);
+        layout.setBottom(new HBox(10, btnCreate, btnLogout));
 
-	// Upload file to server
-	private void uploadFileToServer(File file) throws IOException {
-		String fileName = URLEncoder.encode(file.getName(), StandardCharsets.UTF_8);
-		String url = IP.SERVER_IP + "/upload?username=" + username + "&filename=" + fileName;
+        layout.setStyle("-fx-padding: 20; -fx-background-color: #ffffff;");
 
-		HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
-		connection.setRequestMethod("POST");
-		connection.setDoOutput(true);
-		connection.setRequestProperty("Content-Type", "application/octet-stream");
+        Scene scene = new Scene(layout, 1200, 700);
+        primaryStage.setScene(scene);
+        primaryStage.show();
 
-		try (OutputStream os = connection.getOutputStream(); FileInputStream fis = new FileInputStream(file)) {
+        getUserNameFromServer();
+        scene.getStylesheets().add(getClass().getResource("/css/ManagerPage.css").toExternalForm());
+    }
 
-			byte[] buffer = new byte[4096];
-			int bytesRead;
-			while ((bytesRead = fis.read(buffer)) != -1) {
-				os.write(buffer, 0, bytesRead);
-			}
-		}
+    private ImageView createAvatarImageView() {
+        ImageView imageView = new ImageView();
+        imageView.setImage(new Image("file:images/avatar.png"));
+        imageView.setFitWidth(200);
+        imageView.setFitHeight(200);
+        Circle clip = new Circle(100, 100, 100);
+        imageView.setClip(clip);
+        imageView.getStyleClass().add("avatar-image");
+        return imageView;
+    }
 
-		int responseCode = connection.getResponseCode();
-		if (responseCode == HttpURLConnection.HTTP_OK) {
-			showAlert("File uploaded successfully!");
-		} else {
-			showAlert("File upload failed with HTTP code: " + responseCode);
-		}
+    private void showCreateProjectDialog() {
+        TextInputDialog dialog = new TextInputDialog();
+        dialog.setTitle("Create Project");
+        dialog.setHeaderText("Enter project name:");
+        dialog.setContentText("Project Name:");
+        dialog.showAndWait().ifPresent(this::createProjectOnServer);
+    }
 
-		connection.disconnect();
-	}
+    private void createProjectOnServer(String projectName) {
+        try {
+            String url = IP.SERVER_IP + "/createProject";
+            String params = "username=" + URLEncoder.encode(username, StandardCharsets.UTF_8) +
+                            "&projectName=" + URLEncoder.encode(projectName, StandardCharsets.UTF_8) + 
+                            "&email=" + URLEncoder.encode(email, StandardCharsets.UTF_8);
 
-	// Load file list from server
-	private void loadFileListFromServer() {
-		try {
-			URL url = new URL(IP.SERVER_IP + "/files?username=" + username);
-			HttpURLConnection connection = (HttpURLConnection) url.openConnection();
-			connection.setRequestMethod("GET");
+            HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
+            connection.setRequestMethod("POST");
+            connection.setDoOutput(true);
+            connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
 
-			int responseCode = connection.getResponseCode();
-			if (responseCode == HttpURLConnection.HTTP_OK) {
-				try (InputStream is = connection.getInputStream(); Scanner scanner = new Scanner(is)) {
+            try (OutputStream os = connection.getOutputStream()) {
+                byte[] input = params.getBytes(StandardCharsets.UTF_8);
+                os.write(input, 0, input.length);
+            }
 
-					List<String> files = new ArrayList<>();
-					while (scanner.hasNextLine()) {
-						String line = scanner.nextLine().trim();
-						if (!line.isEmpty()) {
-							files.add(line);
-						}
-					}
-					listView.getItems().setAll(files);
-				}
-			} else {
-				showAlert("Failed to load file list: HTTP " + responseCode);
-			}
+            if (connection.getResponseCode() == HttpURLConnection.HTTP_OK) {
+                showAlert("Project created successfully!");
+                getProjectListFromServer();
+            } else {
+                showAlert("Failed to create project: HTTP " + connection.getResponseCode());
+            }
 
-			connection.disconnect();
-		} catch (IOException e) {
-			showAlert("Failed to load file list: " + e.getMessage());
-		}
-	}
+            connection.disconnect();
+        } catch (IOException ex) {
+            showAlert("Request failed: " + ex.getMessage());
+        }
+    }
 
-	// Delete file from server
-	private void deleteFileFromServer(String fileName) throws IOException {
-		String encodedFileName = URLEncoder.encode(fileName, StandardCharsets.UTF_8);
-		String url = IP.SERVER_IP + "/delete?username=" + username + "&filename=" + encodedFileName;
+    private void sendLogoutRequest() {
+        try {
+            String url = IP.SERVER_IP + "/logout?username=" + URLEncoder.encode(email, StandardCharsets.UTF_8);
+            HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
+            connection.setRequestMethod("POST");
 
-		HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
-		connection.setRequestMethod("DELETE");
+            if (connection.getResponseCode() != HttpURLConnection.HTTP_OK) {
+                showAlert("Logout failed: HTTP " + connection.getResponseCode());
+            }
+            connection.disconnect();
+        } catch (IOException ex) {
+            showAlert("Logout request failed: " + ex.getMessage());
+        }
+    }
 
-		int responseCode = connection.getResponseCode();
-		if (responseCode == HttpURLConnection.HTTP_OK) {
-			showAlert("File deleted successfully!");
-		} else {
-			showAlert("File deletion failed with HTTP code: " + responseCode);
-		}
+    private void getUserNameFromServer() {
+        try {
+            String url = IP.SERVER_IP + "/getUserName?email=" + URLEncoder.encode(email, StandardCharsets.UTF_8);
+            HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
+            connection.setRequestMethod("GET");
 
-		connection.disconnect();
-	}
+            if (connection.getResponseCode() == HttpURLConnection.HTTP_OK) {
+                BufferedReader in = new BufferedReader(new InputStreamReader(connection.getInputStream()));
+                username = in.readLine();
+                in.close();
+                lblUsernameText.setText(username);
+                getProjectListFromServer();
+            } else {
+                showAlert("Failed to fetch username: HTTP " + connection.getResponseCode());
+                lblUsernameText.setText(email);
+            }
+            connection.disconnect();
+        } catch (IOException ex) {
+            showAlert("Request failed: " + ex.getMessage());
+            lblUsernameText.setText(email);
+        }
+    }
 
-	private void sendLogoutRequest() {
-		try {
-			String url = IP.SERVER_IP + "/logout?username=" + URLEncoder.encode(username, StandardCharsets.UTF_8);
-			HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
-			connection.setRequestMethod("POST");
+    private void getProjectListFromServer() {
+        try {
+            String url = IP.SERVER_IP + "/listProjects?username=" + URLEncoder.encode(username, StandardCharsets.UTF_8);
+            HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
+            connection.setRequestMethod("GET");
 
-			int responseCode = connection.getResponseCode();
-			if (responseCode != HttpURLConnection.HTTP_OK) {
-				showAlert("Logout failed: HTTP " + responseCode);
-			}
+            if (connection.getResponseCode() == HttpURLConnection.HTTP_OK) {
+                BufferedReader in = new BufferedReader(new InputStreamReader(connection.getInputStream()));
+                String response = in.readLine();
+                in.close();
 
-			connection.disconnect();
-		} catch (IOException ex) {
-			showAlert("Logout request failed: " + ex.getMessage());
-		}
-	}
+                projectContainer.getChildren().clear();
+                projectCount = 0;
 
-	private void showAlert(String message) {
-		Alert alert = new Alert(Alert.AlertType.INFORMATION);
-		alert.setHeaderText(null);
-		alert.setContentText(message);
-		alert.showAndWait();
-	}
+                if (response == null || response.isEmpty()) {
+                    Label noProjectsLabel = new Label("No projects available.");
+                    noProjectsLabel.getStyleClass().add("no-projects-label");
+                    projectContainer.getChildren().add(noProjectsLabel);
+                    return;
+                }
+
+                String[] projects = response.split(",");
+                HBox currentHBox = new HBox(10);
+                currentHBox.setSpacing(10);
+
+                for (String project : projects) {
+                    Label projectLabel = new Label(project);
+                    projectLabel.getStyleClass().add("project-card");
+
+                    projectLabel.setOnMouseClicked((MouseEvent event) -> {
+                        ProjectPage projectPage = new ProjectPage(email, username, project);
+                        try {
+                            projectPage.start((Stage) projectLabel.getScene().getWindow());
+                        } catch (Exception e) {
+                            e.printStackTrace();
+                        }
+                    });
+
+                    currentHBox.getChildren().add(projectLabel);
+                    projectCount++;
+
+                    if (projectCount % PROJECTS_PER_HBOX == 0) {
+                        projectContainer.getChildren().add(currentHBox);
+                        currentHBox = new HBox(10);
+                        currentHBox.setSpacing(10);
+                    }
+                }
+
+                if (!currentHBox.getChildren().isEmpty()) {
+                    projectContainer.getChildren().add(currentHBox);
+                }
+            } else {
+                showAlert("Failed to fetch projects: HTTP " + connection.getResponseCode());
+            }
+            connection.disconnect();
+        } catch (IOException ex) {
+            showAlert("Request failed: " + ex.getMessage());
+        }
+    }
+
+    private void showAlert(String message) {
+        Alert alert = new Alert(Alert.AlertType.INFORMATION);
+        alert.setHeaderText(null);
+        alert.setContentText(message);
+        alert.showAndWait();
+    }
 }
