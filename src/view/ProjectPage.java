@@ -16,6 +16,8 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import ip.IP;
 
@@ -66,16 +68,16 @@ public class ProjectPage extends Application {
         btnDeleteFile.setOnAction(e -> {
             String selectedFile = fileList.getSelectionModel().getSelectedItem();
             if (selectedFile != null) {
-                // Hiển thị hộp thoại xác nhận
+                String fileName = selectedFile.split("\\s+")[0];  
+
                 Alert confirmationAlert = new Alert(Alert.AlertType.CONFIRMATION);
                 confirmationAlert.setTitle("Confirmation");
                 confirmationAlert.setHeaderText(null);
-                confirmationAlert.setContentText("Do you want to delete this file?");
+                confirmationAlert.setContentText("Do you want to delete the file: " + fileName + "?");
                 
-                // Chờ người dùng chọn
                 confirmationAlert.showAndWait().ifPresent(response -> {
                     if (response == ButtonType.OK) {
-                        deleteFileFromServer(selectedFile, username, projectName, fileList);
+                        deleteFileFromServer(fileName, username, projectName, fileList);
                     }
                 });
             } else {
@@ -241,13 +243,31 @@ public class ProjectPage extends Application {
             int responseCode = connection.getResponseCode();
             if (responseCode == HttpURLConnection.HTTP_OK) {
                 BufferedReader in = new BufferedReader(new InputStreamReader(connection.getInputStream()));
-                String response = in.readLine();
+                StringBuilder response = new StringBuilder();
+                String inputLine;
+                while ((inputLine = in.readLine()) != null) {
+                    response.append(inputLine);
+                }
                 in.close();
 
-                if (response != null && !response.isEmpty()) {
-                    String[] files = response.split(",");
+                if (response.length() > 0) {
+                    String responseBody = response.toString();
+
+                    responseBody = responseBody.substring(1, responseBody.length() - 1).trim();
+
+                    String[] files = responseBody.split("},\\{");
+
                     fileList.getItems().clear();
-                    fileList.getItems().addAll(files);
+                    
+                    for (String file : files) {
+                        String fileName = extractValue(file, "fileName");
+                        String fileSize = extractValue(file, "fileSize");
+                        String elapsedTime = extractValue(file, "elapsedTime");
+
+                        // Định dạng thông tin file
+                        String fileInfo = String.format("%-30s %-15s %20s", fileName, fileSize, elapsedTime);
+                        fileList.getItems().add(fileInfo);
+                    }
                 } else {
                     fileList.getItems().clear();
                     showAlert("No files found in this project.");
@@ -260,6 +280,16 @@ public class ProjectPage extends Application {
         } catch (IOException ex) {
             showAlert("Request failed: " + ex.getMessage());
         }
+    }
+
+    private String extractValue(String json, String key) {
+        String pattern = "\"" + key + "\":\"([^\"]+)\"";
+        Pattern r = Pattern.compile(pattern);
+        Matcher m = r.matcher(json);
+        if (m.find()) {
+            return m.group(1);
+        }
+        return "";
     }
 
     private void showAlert(String message) {
