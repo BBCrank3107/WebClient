@@ -8,90 +8,127 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.URLEncoder;
 import javafx.application.Application;
+import javafx.geometry.Insets;
+import javafx.geometry.Pos;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
-import javafx.scene.layout.VBox;
+import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
+import javafx.scene.layout.*;
 import javafx.stage.Stage;
 
 import ip.IP;
 
 public class LoginPage extends Application {
 
-	@Override
-	public void start(Stage primaryStage) {
-		primaryStage.setTitle("Login");
+    @Override
+    public void start(Stage primaryStage) {
+        primaryStage.setTitle("Login");
 
-		TextField usernameField = new TextField();
-		usernameField.setPromptText("Username");
+        Label loginLabel = new Label("LOGIN");
+        loginLabel.setStyle("-fx-font-size: 30px; -fx-font-weight: bold;");
 
-		PasswordField passwordField = new PasswordField();
-		passwordField.setPromptText("Password");
+        TextField emailField = new TextField();
+        emailField.setPromptText("Email");
+        emailField.setMaxWidth(300);
+        emailField.setStyle("-fx-font-size: 16px;");
 
-		Button btnLogin = new Button("Login");
-		Button btnRegister = new Button("Register");
+        PasswordField passwordField = new PasswordField();
+        passwordField.setPromptText("Password");
+        passwordField.setMaxWidth(300);
+        passwordField.setStyle("-fx-font-size: 16px;");
 
-		btnLogin.setOnAction(e -> {
-			String username = usernameField.getText();
-			String password = passwordField.getText();
+        Button btnLogin = new Button("Login");
+        Button btnRegister = new Button("Register");
 
-			String url = IP.SERVER_IP + "/login";
-			try {
-				HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
-				connection.setRequestMethod("POST");
-				connection.setDoOutput(true);
-				connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
+        btnLogin.setStyle("-fx-background-color: #4CAF50; -fx-text-fill: white; -fx-font-size: 16px;");
+        btnRegister.setStyle("-fx-background-color: #2196F3; -fx-text-fill: white; -fx-font-size: 16px;");
 
-				// Tạo dữ liệu để gửi
-				String requestData = "username=" + URLEncoder.encode(username, "UTF-8") + "&password="
-						+ URLEncoder.encode(password, "UTF-8");
+        btnLogin.setOnAction(e -> {
+            String email = emailField.getText();
+            String password = passwordField.getText();
 
-				// Gửi dữ liệu
-				try (OutputStream os = connection.getOutputStream()) {
-					os.write(requestData.getBytes());
-					os.flush();
-				}
+            String url = IP.SERVER_IP + "/login";
+            try {
+                HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
+                connection.setRequestMethod("POST");
+                connection.setDoOutput(true);
+                connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
 
-				// Nhận phản hồi từ server
-				int responseCode = connection.getResponseCode();
-				if (responseCode == HttpURLConnection.HTTP_OK) {
-					BufferedReader in = new BufferedReader(new InputStreamReader(connection.getInputStream()));
-					String response = in.readLine();
+                // Tạo dữ liệu để gửi
+                String requestData = "email=" + URLEncoder.encode(email, "UTF-8") + "&password="
+                        + URLEncoder.encode(password, "UTF-8");
 
-					if ("success".equals(response)) {
-						showAlert("Login successful!");
-						new ManagerPage(username).start(primaryStage);
-					} else {
-						showAlert("Login failed: " + response);
-					}
-				} else {
-					showAlert("Username or Password Invalid!");
-				}
+                // Gửi dữ liệu
+                try (OutputStream os = connection.getOutputStream()) {
+                    os.write(requestData.getBytes());
+                    os.flush();
+                }
 
-				connection.disconnect();
-			} catch (IOException ex) {
-				ex.printStackTrace();
-				showAlert("Error connecting to server.");
-			}
-		});
+                // Nhận phản hồi từ server
+                int responseCode = connection.getResponseCode();
+                if (responseCode == HttpURLConnection.HTTP_OK) {
+                    BufferedReader in = new BufferedReader(new InputStreamReader(connection.getInputStream()));
+                    String response = in.readLine();
 
-		btnRegister.setOnAction(e -> {
-			new RegisterPage().start(primaryStage);
-		});
+                    if ("success".equals(response)) {
+                        showAlert("Login successful!");
+                        new ManagerPage(email).start(primaryStage);
+                    } else {
+                        showAlert("Login failed: " + response);
+                    }
+                } else {
+                    showAlert("Email or Password Invalid!");
+                }
 
-		VBox layout = new VBox(10, usernameField, passwordField, btnLogin, btnRegister);
-		Scene scene = new Scene(layout, 300, 200);
-		primaryStage.setScene(scene);
-		primaryStage.show();
-	}
+                connection.disconnect();
+            } catch (IOException ex) {
+                ex.printStackTrace();
+                showAlert("Error connecting to server.");
+            }
+        });
 
-	private void showAlert(String message) {
-		Alert alert = new Alert(Alert.AlertType.INFORMATION);
-		alert.setHeaderText(null);
-		alert.setContentText(message);
-		alert.showAndWait();
-	}
+        btnRegister.setOnAction(e -> {
+            new RegisterPage().start(primaryStage);
+        });
 
-	public static void main(String[] args) {
-		launch(args);
-	}
+        // Layout cho phần đăng nhập
+        VBox loginLayout = new VBox(15, loginLabel, emailField, passwordField, btnLogin, btnRegister);
+        loginLayout.setAlignment(Pos.CENTER);
+        loginLayout.setPadding(new Insets(30));
+        loginLayout.setStyle("-fx-background-color: #f0f0f0; -fx-border-radius: 10; -fx-background-radius: 10;");
+        loginLayout.setMaxWidth(600);
+
+        // Phần hình ảnh bên trái
+        ImageView imageView = new ImageView(new Image("file:images/login.jpg"));
+        imageView.setFitWidth(600);
+        imageView.setPreserveRatio(true);
+        imageView.setSmooth(true);
+        imageView.setCache(true);
+
+        StackPane imagePane = new StackPane(imageView);
+        imagePane.setPrefWidth(600);
+        imagePane.setAlignment(Pos.CENTER);
+
+        HBox mainLayout = new HBox(imagePane, loginLayout);
+        HBox.setHgrow(imagePane, Priority.ALWAYS);
+        HBox.setHgrow(loginLayout, Priority.ALWAYS);
+        mainLayout.setSpacing(0);
+        mainLayout.setPrefHeight(800);
+
+        Scene scene = new Scene(mainLayout, 1200, 700);
+        primaryStage.setScene(scene);
+        primaryStage.show();
+    }
+
+    private void showAlert(String message) {
+        Alert alert = new Alert(Alert.AlertType.INFORMATION);
+        alert.setHeaderText(null);
+        alert.setContentText(message);
+        alert.showAndWait();
+    }
+
+    public static void main(String[] args) {
+        launch(args);
+    }
 }
